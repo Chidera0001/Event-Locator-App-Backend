@@ -1,0 +1,16 @@
+{
+  "eventCreated": "Evento creado exitosamente.",
+  "eventUpdated": "Evento actualizado exitosamente.",
+  "eventDeleted": "Evento eliminado exitosamente.",
+  "eventNotFound": "Evento no encontrado.",
+  "eventCategories": "Categorías de eventos",
+  "distance": "Distancia",
+  "kilometers": "kilómetros",
+  "miles": "millas",
+  "upcomingEvents": "Próximos eventos",
+  "nearbyEvents": "Eventos cercanos",
+  "favorite": "Favorito",
+  "unfavorite": "Quitar de favoritos",
+  "eventAddedToFavorites": "Evento añadido a favoritos.",
+  "eventRemovedFromFavorites": "Evento eliminado de favoritos."
+} 

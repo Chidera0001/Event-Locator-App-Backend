@@ -1,0 +1,16 @@
+event-locator/
+├── src/
+│   ├── config/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   ├── utils/
+│   ├── queues/
+│   ├── i18n/
+│   └── app.js
+├── tests/
+├── .env.example
+├── package.json
+└── README.md 

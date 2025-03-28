@@ -1,0 +1,8 @@
+{
+  "welcome": "Welcome to the Event Locator!",
+  "loginSuccess": "You have successfully logged in.",
+  "registerSuccess": "Registration successful.",
+  "logoutSuccess": "You have successfully logged out.",
+  "unauthorized": "Unauthorized access.",
+  "serverError": "Server error occurred."
+} 

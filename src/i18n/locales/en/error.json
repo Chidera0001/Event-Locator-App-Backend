@@ -1,0 +1,9 @@
+{
+  "invalidCredentials": "Invalid username or password.",
+  "emailTaken": "Email is already registered.",
+  "usernameTaken": "Username is already taken.",
+  "missingFields": "Please provide all required fields.",
+  "invalidLocation": "Invalid location coordinates.",
+  "notFound": "Resource not found.",
+  "unauthorized": "You are not authorized to perform this action."
+} 

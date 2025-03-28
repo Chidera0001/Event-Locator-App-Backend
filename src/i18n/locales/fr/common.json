@@ -1,0 +1,8 @@
+{
+  "welcome": "Bienvenue sur le Localisateur d'Événements !",
+  "loginSuccess": "Vous vous êtes connecté avec succès.",
+  "registerSuccess": "Inscription réussie.",
+  "logoutSuccess": "Vous vous êtes déconnecté avec succès.",
+  "unauthorized": "Accès non autorisé.",
+  "serverError": "Une erreur serveur s'est produite."
+} 
