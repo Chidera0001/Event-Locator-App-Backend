@@ -24,20 +24,40 @@ if (process.env.NODE_ENV === 'test') {
   const client = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD
+    password: process.env.REDIS_PASSWORD,
+    retryStrategy: (times) => {
+      const delay = Math.min(times * 50, 2000);
+      logger.info(`Retrying Redis connection... Attempt ${times}`);
+      return delay;
+    },
+    maxRetriesPerRequest: 3,
+    lazyConnect: true // Only connect when needed
   });
 
   client.on('error', (err) => {
-    logger.error('Redis client error:', err);
+    logger.error('Redis client error:', err.message);
   });
 
   client.on('connect', () => {
-    logger.info('Connected to Redis');
+    logger.info('Connected to Redis successfully');
   });
 
-  // Connect to Redis
+  client.on('ready', () => {
+    logger.info('Redis client is ready');
+  });
+
+  // Test the connection
   (async () => {
-    await client.connect();
+    try {
+      await client.ping();
+      logger.info('Redis connection test successful');
+    } catch (error) {
+      logger.error('Redis connection test failed:', error.message);
+      logger.info('Redis connection details:', {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379
+      });
+    }
   })();
 
   module.exports = {

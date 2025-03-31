@@ -38,7 +38,18 @@ const AuthController = {
     try {
       const { email, password } = req.body;
       
+      logger.debug('Login attempt:', { 
+        email,
+        hasPassword: !!password,
+        body: req.body 
+      });
+      
       const { user, token } = await AuthService.login(email, password);
+      
+      logger.debug('Login successful:', { 
+        userId: user.id,
+        userRole: user.role
+      });
       
       res.status(200).json({
         success: true,
@@ -46,6 +57,11 @@ const AuthController = {
         data: { user, token }
       });
     } catch (error) {
+      logger.error('Login failed:', { 
+        error: error.message,
+        stack: error.stack
+      });
+      
       if (error.message === 'Invalid credentials') {
         return res.status(401).json({
           success: false,

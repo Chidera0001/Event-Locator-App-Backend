@@ -1,4 +1,4 @@
-const redis = require('../queues/redis');
+const { client: redis } = require('../queues/redis');
 const eventService = require('./event.service');
 const userService = require('./user.service');
 const logger = require('../config/logger');
@@ -63,13 +63,18 @@ const NotificationService = {
 
   async processNotifications() {
     try {
-      const now = Date.now();
-      const notifications = await redis.zRangeByScore('scheduled_notifications', 0, now);
-
-      for (const notification of notifications) {
-        const data = JSON.parse(notification);
-        await this.sendNotification(data);
-        await redis.zRem('scheduled_notifications', notification);
+      const notifications = await redis.zrangebyscore('notifications', '-inf', Date.now());
+      
+      if (notifications && notifications.length > 0) {
+        for (const notification of notifications) {
+          try {
+            const notificationData = JSON.parse(notification);
+            await this.sendNotification(notificationData);
+            await redis.zrem('notifications', notification);
+          } catch (error) {
+            logger.error('Error processing notification:', error);
+          }
+        }
       }
     } catch (error) {
       logger.error('Error processing notifications:', error);

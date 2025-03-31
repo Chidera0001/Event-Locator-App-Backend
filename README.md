@@ -161,7 +161,106 @@ A multi-user event locator application allowing users to discover events based o
 - `GET /api/categories`: Get all categories
 - `GET /api/categories/:id`: Get category details
 
-![API Endpoints](./docs/images/api-endpoints.png)
+## Permission Levels & Access Control
+
+### Public (No Authentication)
+- View all events
+- View single event details
+- Search events by location
+- View events by category
+- View event reviews
+- Register new account
+- Login to existing account
+- Access API documentation
+- Check server health status
+
+### Authenticated Users
+All public permissions, plus:
+- Create new events
+- Update their own events
+- Delete their own events
+- Add events to favorites
+- Remove events from favorites
+- View their favorite events
+- Add reviews to events
+- Update their profile
+- Change password
+- Set location preferences
+- Manage notification settings
+
+### Admin Users
+All authenticated user permissions, plus:
+- View all users
+- Update any user's status
+- Delete users
+- View all events with detailed information
+- Update any event
+- Delete any event
+- Update event status (active/cancelled/completed)
+- Manage categories
+- View system statistics
+- Access admin dashboard
+
+## API Endpoints by Permission Level
+
+### Public Endpoints
+```bash
+# Authentication
+POST   /api/auth/register
+POST   /api/auth/login
+
+# Events
+GET    /api/events                    # List all events
+GET    /api/events/{id}              # Get event details
+GET    /api/events/search/location    # Search by location
+GET    /api/events/category/{id}      # Get events by category
+GET    /api/events/{id}/reviews       # Get event reviews
+
+# Categories
+GET    /api/categories               # List all categories
+```
+
+### Authenticated User Endpoints
+```bash
+# Event Management
+POST   /api/events                    # Create event
+PUT    /api/events/{id}              # Update own event
+DELETE /api/events/{id}              # Delete own event
+
+# Favorites
+POST   /api/events/{id}/favorite      # Add to favorites
+DELETE /api/events/{id}/favorite      # Remove from favorites
+GET    /api/events/user/favorites     # Get user's favorites
+
+# Reviews
+POST   /api/events/{id}/reviews       # Add review
+
+# User Profile
+GET    /api/users/profile            # Get profile
+PUT    /api/users/profile            # Update profile
+PUT    /api/users/password           # Change password
+GET    /api/users/preferences        # Get preferences
+PUT    /api/users/preferences        # Update preferences
+```
+
+### Admin Endpoints
+```bash
+# User Management
+GET    /api/admin/users              # Get all users
+PUT    /api/admin/users/{id}         # Update user
+DELETE /api/admin/users/{id}         # Delete user
+
+# Event Management
+GET    /api/admin/events             # Get all events
+PUT    /api/admin/events/{id}        # Update any event
+DELETE /api/admin/events/{id}        # Delete any event
+PUT    /api/admin/events/{id}/status # Update event status
+
+# Category Management
+POST   /api/admin/categories         # Create category
+PUT    /api/admin/categories/{id}    # Update category
+DELETE /api/admin/categories/{id}    # Delete category
+```
 
 ## Project Structure
 event-locator/

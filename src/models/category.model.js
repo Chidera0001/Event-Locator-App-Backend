@@ -1,118 +1,99 @@
-const db = require('../config/database');
+const { pool } = require('../config/database');
+const logger = require('../config/logger');
 
-const CategoryModel = (pool) => {
-  return {
-    async create(name) {
-      const query = `
-        INSERT INTO categories (name)
-        VALUES ($1)
-        RETURNING id, name, created_at
-      `;
-      
-      const result = await pool.query(query, [name]);
-      return result.rows[0];
-    },
+const CategoryModel = {
+  async getAllCategories() {
+    const query = `
+      SELECT id, name, created_at
+      FROM categories
+      ORDER BY name
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  },
 
-    async findAll() {
-      const query = `
-        SELECT id, name, created_at
-        FROM categories
-        ORDER BY created_at DESC
-      `;
-      
-      const result = await pool.query(query);
-      return result.rows;
-    },
+  async getCategoryById(id) {
+    const query = `
+      SELECT id, name, created_at
+      FROM categories
+      WHERE id = $1
+    `;
+    const result = await pool.query(query, [id]);
+    return result.rows[0];
+  },
 
-    async findById(id) {
-      const query = `
-        SELECT id, name, created_at
-        FROM categories
-        WHERE id = $1
-      `;
-      
-      const result = await pool.query(query, [id]);
-      return result.rows[0] || null;
-    },
+  async setUserPreferences(userId, categoryIds) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    async getAllCategories() {
-      const query = `
-        SELECT id, name, created_at, updated_at
-        FROM categories
-        ORDER BY name
-      `;
-      
-      const result = await db.query(query);
-      return result.rows;
-    },
-    
-    async getUserPreferences(userId) {
-      const query = `
-        SELECT c.id, c.name
-        FROM categories c
-        JOIN user_category_preferences ucp ON c.id = ucp.category_id
-        WHERE ucp.user_id = $1
-        ORDER BY c.name
-      `;
-      
-      const result = await db.query(query, [userId]);
-      return result.rows;
-    },
-    
-    async setUserPreferences(userId, categoryIds) {
-      // Start a transaction
-      const client = await db.getClient();
-      
-      try {
-        await client.query('BEGIN');
-        
-        // Delete existing preferences
-        const deleteQuery = `
-          DELETE FROM user_category_preferences
-          WHERE user_id = $1
-        `;
-        await client.query(deleteQuery, [userId]);
-        
-        // Insert new preferences
-        if (categoryIds.length > 0) {
-          const insertValues = categoryIds.map((_, index) => `($1, $${index + 2})`).join(', ');
-          const insertQuery = `
-            INSERT INTO user_category_preferences (user_id, category_id)
-            VALUES ${insertValues}
-          `;
-          
-          const insertParams = [userId, ...categoryIds];
-          await client.query(insertQuery, insertParams);
+      // Delete existing preferences
+      await client.query(
+        'DELETE FROM user_preferences WHERE user_id = $1',
+        [userId]
+      );
+
+      if (categoryIds && categoryIds.length > 0) {
+        // Verify all categories exist
+        const existingCategories = await client.query(
+          'SELECT id FROM categories WHERE id = ANY($1::uuid[])',
+          [categoryIds]
+        );
+
+        if (existingCategories.rows.length !== categoryIds.length) {
+          throw new Error('Some category IDs are invalid');
         }
+
+        // Insert new preferences
+        const values = categoryIds.map(categoryId => ({
+          userId,
+          categoryId
+        }));
+
+        const insertQuery = `
+          INSERT INTO user_preferences (user_id, category_id)
+          VALUES ($1, $2)
+          RETURNING id, user_id, category_id, notification_radius, email_notifications
+        `;
+
+        const insertPromises = values.map(v => 
+          client.query(insertQuery, [v.userId, v.categoryId])
+        );
         
+        const results = await Promise.all(insertPromises);
         await client.query('COMMIT');
         
-        return this.getUserPreferences(userId);
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
+        return results.map(r => r.rows[0]);
       }
-    },
 
-    async update(id, name) {
-      const query = `
-        UPDATE categories
-        SET name = $2
-        WHERE id = $1
-        RETURNING id, name, created_at
-      `;
-      
-      const result = await pool.query(query, [id, name]);
-      return result.rows[0];
-    },
-
-    async delete(id) {
-      const query = `DELETE FROM categories WHERE id = $1`;
-      await pool.query(query, [id]);
+      await client.query('COMMIT');
+      return [];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error setting user preferences:', error);
+      throw error;
+    } finally {
+      client.release();
     }
-  };
+  },
+
+  async getUserPreferences(userId) {
+    const query = `
+      SELECT 
+        up.id,
+        up.user_id,
+        up.category_id,
+        up.notification_radius,
+        up.email_notifications,
+        c.name as category_name
+      FROM user_preferences up
+      JOIN categories c ON c.id = up.category_id
+      WHERE up.user_id = $1
+    `;
+    
+    const result = await pool.query(query, [userId]);
+    return result.rows;
+  }
 };
 
 module.exports = CategoryModel; 

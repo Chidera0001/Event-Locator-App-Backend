@@ -1,0 +1,72 @@
+{
+  "info": {
+    "name": "Event Locator API",
+    "description": "API collection for testing the Event Locator application",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": {
+                "username": "testuser",
+                "email": "test@example.com",
+                "password": "Password123!"
+              }
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": {
+                "email": "test@example.com",
+                "password": "Password123!"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/events",
+            "headers": {
+              "Authorization": "Bearer {{authToken}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": {
+                "title": "Test Event",
+                "description": "Test Description",
+                "location": {
+                  "type": "Point",
+                  "coordinates": [-73.935242, 40.730610]
+                },
+                "address": "123 Test St",
+                "start_date": "2024-03-20T10:00:00Z",
+                "end_date": "2024-03-20T18:00:00Z"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+} 

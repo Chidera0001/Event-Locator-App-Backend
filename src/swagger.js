@@ -21,9 +21,13 @@ const options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+          description: 'Enter your JWT token in the format: Bearer <token>'
         },
       },
     },
+    security: [{
+      bearerAuth: []
+    }]
   },
   apis: ['./src/routes/*.js'], // Path to the API routes files
 };
@@ -32,5 +36,10 @@ const specs = swaggerJsdoc(options);
 
 module.exports = {
   serve: swaggerUi.serve,
-  setup: swaggerUi.setup(specs),
+  setup: swaggerUi.setup(specs, {
+    explorer: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  }),
 }; 

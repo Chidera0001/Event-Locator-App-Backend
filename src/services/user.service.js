@@ -1,6 +1,7 @@
 const userModel = require('../models/user.model');
 const locationModel = require('../models/location.model');
 const categoryModel = require('../models/category.model');
+const logger = require('../config/logger');
 
 const UserService = {
   async getUserById(id) {
@@ -32,11 +33,33 @@ const UserService = {
   },
   
   async setUserLocation(userId, locationData) {
-    return locationModel.setUserLocation(userId, locationData);
+    try {
+      // First verify user exists
+      const user = await userModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      return await locationModel.setUserLocation(userId, locationData);
+    } catch (error) {
+      logger.error('Error in setUserLocation service:', error);
+      throw error;
+    }
   },
   
   async getUserLocation(userId) {
-    return locationModel.getUserLocation(userId);
+    try {
+      // First verify user exists
+      const user = await userModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      return await locationModel.getUserLocation(userId);
+    } catch (error) {
+      logger.error('Error in getUserLocation service:', error);
+      throw error;
+    }
   },
   
   async setUserPreferences(userId, categoryIds) {

@@ -15,6 +15,7 @@ const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const eventRoutes = require('./routes/event.routes');
 const categoryRoutes = require('./routes/category.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Swagger API Documentation
 app.use('/api-docs', swagger.serve, swagger.setup);

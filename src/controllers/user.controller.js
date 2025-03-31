@@ -1,29 +1,38 @@
 const userService = require('../services/user.service');
+const logger = require('../config/logger');
+const { body } = require('express-validator');
 
 const UserController = {
   async getProfile(req, res) {
-    const user = req.user;
-    
-    res.status(200).json({
-      success: true,
-      data: { user }
-    });
+    try {
+      const user = await userService.getUserById(req.user.id);
+      res.status(200).json({
+        success: true,
+        data: { user }
+      });
+    } catch (error) {
+      logger.error('Error getting user profile:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get user profile'
+      });
+    }
   },
   
   async updateProfile(req, res, next) {
     try {
-      const { username, email, language } = req.body;
       const userId = req.user.id;
-      
+      const { username, email, preferred_language } = req.body;
+
       const updatedUser = await userService.updateProfile(userId, {
         username,
         email,
-        language
+        preferred_language
       });
-      
+
       res.status(200).json({
         success: true,
-        message: req.t('profileUpdated', { ns: 'user' }),
+        message: 'Profile updated successfully',
         data: { user: updatedUser }
       });
     } catch (error) {
@@ -59,10 +68,20 @@ const UserController = {
       const { latitude, longitude, address } = req.body;
       const userId = req.user.id;
       
-      if (!latitude || !longitude) {
+      logger.debug('Updating user location:', {
+        userId,
+        latitude,
+        longitude,
+        address
+      });
+
+      // Validate coordinates
+      if (!latitude || !longitude || 
+          latitude < -90 || latitude > 90 || 
+          longitude < -180 || longitude > 180) {
         return res.status(400).json({
           success: false,
-          message: req.t('invalidLocation', { ns: 'error' })
+          message: 'Invalid coordinates. Latitude must be between -90 and 90, longitude between -180 and 180'
         });
       }
       
@@ -74,10 +93,11 @@ const UserController = {
       
       res.status(200).json({
         success: true,
-        message: req.t('locationUpdated', { ns: 'user' }),
+        message: 'Location updated successfully',
         data: { location }
       });
     } catch (error) {
+      logger.error('Error updating location:', error);
       next(error);
     }
   },
@@ -98,24 +118,23 @@ const UserController = {
   
   async updatePreferences(req, res, next) {
     try {
-      const { categories } = req.body;
       const userId = req.user.id;
-      
-      if (!Array.isArray(categories)) {
-        return res.status(400).json({
-          success: false,
-          message: req.t('missingFields', { ns: 'error' })
-        });
-      }
-      
+      const { categories } = req.body;
+
+      logger.debug('Updating user preferences:', {
+        userId,
+        categories
+      });
+
       const preferences = await userService.setUserPreferences(userId, categories);
-      
+
       res.status(200).json({
         success: true,
-        message: req.t('preferencesUpdated', { ns: 'user' }),
-        data: { categories: preferences }
+        message: 'Preferences updated successfully',
+        data: { preferences }
       });
     } catch (error) {
+      logger.error('Error updating preferences:', error);
       next(error);
     }
   },
@@ -123,13 +142,14 @@ const UserController = {
   async getPreferences(req, res, next) {
     try {
       const userId = req.user.id;
-      const categories = await userService.getUserPreferences(userId);
-      
+      const preferences = await userService.getUserPreferences(userId);
+
       res.status(200).json({
         success: true,
-        data: { categories }
+        data: { preferences }
       });
     } catch (error) {
+      logger.error('Error getting preferences:', error);
       next(error);
     }
   },
@@ -154,4 +174,12 @@ const UserController = {
   }
 };
 
-module.exports = UserController; 
+const preferencesValidation = [
+  body('categories').isArray().withMessage('Categories must be an array'),
+  body('categories.*').isUUID().withMessage('Each category must be a valid UUID')
+];
+
+module.exports = {
+  ...UserController,
+  preferencesValidation
+}; 

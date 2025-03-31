@@ -11,9 +11,17 @@
     "test:coverage": "cross-env NODE_ENV=test jest --coverage --runInBand --forceExit --config jest.config.js",
     "test:verbose": "cross-env NODE_ENV=test jest --verbose --config jest.config.js",
     "lint": "eslint src/**/*.js",
-    "migrate": "node src/database/migrations/run-migrations.js",
+    "migrate": "node src/migrations/run-migrations.js",
+    "verify": "node src/scripts/verify-tables.js",
+    "setup-db": "npm run migrate && npm run verify",
     "test:reset-db": "cross-env NODE_ENV=test node src/scripts/reset-test-db.js",
-    "pretest": "cross-env NODE_ENV=test node tests/db-setup.js"
+    "pretest": "cross-env NODE_ENV=test node tests/db-setup.js",
+    "create-admin": "node src/scripts/seed-admin.js",
+    "check-admin": "node src/scripts/check-admin.js",
+    "check-users": "node src/scripts/check-users.js",
+    "check-db": "node src/scripts/check-database.js",
+    "reset-admin": "node src/scripts/reset-admin.js",
+    "setup-categories": "node src/scripts/setup-categories.js"
   },
   "dependencies": {
     "axios": "^1.8.4",
@@ -37,6 +45,7 @@
     "redis": "^4.6.6",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.1.0",
     "winston": "^3.8.2",
     "ws": "^8.18.1"
   },

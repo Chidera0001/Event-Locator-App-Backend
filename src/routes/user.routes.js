@@ -81,9 +81,35 @@ router.put('/password', updatePasswordValidation, validate, userController.updat
 // Location routes
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     UserLocation:
+ *       type: object
+ *       required:
+ *         - latitude
+ *         - longitude
+ *         - address
+ *       properties:
+ *         latitude:
+ *           type: number
+ *           minimum: -90
+ *           maximum: 90
+ *           example: -1.9441  # Kigali latitude
+ *           description: "Latitude coordinate (e.g., -1.9441 for Kigali)"
+ *         longitude:
+ *           type: number
+ *           minimum: -180
+ *           maximum: 180
+ *           example: 30.0619  # Kigali longitude
+ *           description: "Longitude coordinate (e.g., 30.0619 for Kigali)"
+ *         address:
+ *           type: string
+ *           example: "KG 7 Ave, Kigali"
+ *           description: "Physical address (e.g., street name, city)"
+ * 
  * /api/users/location:
  *   put:
- *     summary: Update user location
+ *     summary: Update user's location
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -92,22 +118,44 @@ router.put('/password', updatePasswordValidation, validate, userController.updat
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - latitude
- *               - longitude
- *             properties:
- *               latitude:
- *                 type: number
- *               longitude:
- *                 type: number
- *               address:
- *                 type: string
+ *             $ref: '#/components/schemas/UserLocation'
+ *           example:
+ *             latitude: -1.9441
+ *             longitude: 30.0619
+ *             address: "KG 7 Ave, Kigali"
  *     responses:
  *       200:
  *         description: Location updated successfully
+ *       400:
+ *         description: Invalid coordinates
  *       401:
  *         description: Unauthorized
+ *
+ *   get:
+ *     summary: Get user's location
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User location retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     location:
+ *                       $ref: '#/components/schemas/UserLocation'
+ *                     example:
+ *                       latitude: -1.9441
+ *                       longitude: 30.0619
+ *                       address: "KG 7 Ave, Kigali"
  */
 const locationValidation = [
   body('latitude').isFloat({ min: -90, max: 90 }),
@@ -134,14 +182,45 @@ router.put('/location', locationValidation, validate, userController.updateLocat
 
 // Preferences routes
 const preferencesValidation = [
-  body('categories').isArray()
+  body('categories').isArray().withMessage('Categories must be an array'),
+  body('categories.*').isUUID().withMessage('Each category must be a valid UUID')
 ];
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     UserPreferences:
+ *       type: object
+ *       required:
+ *         - categories
+ *       properties:
+ *         categories:
+ *           type: array
+ *           items:
+ *             type: string
+ *             format: uuid
+ *           description: "Array of category UUIDs the user is interested in"
+ *           example: [
+ *             "550e8400-e29b-41d4-a716-446655440000",  # Technology events
+ *             "650e8400-e29b-41d4-a716-446655440001"   # Music events
+ *           ]
+ *         notification_radius:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *           description: "Radius in kilometers for event notifications"
+ *           example: 10
+ *         email_notifications:
+ *           type: boolean
+ *           default: true
+ *           description: "Whether to receive email notifications"
+ *           example: true
+ * 
  * /api/users/preferences:
  *   put:
- *     summary: Update user preferences
+ *     summary: Update user's preferences
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -150,19 +229,43 @@ const preferencesValidation = [
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - categories
- *             properties:
- *               categories:
- *                 type: array
- *                 items:
- *                   type: integer
+ *             $ref: '#/components/schemas/UserPreferences'
+ *           example:
+ *             categories: [
+ *               "550e8400-e29b-41d4-a716-446655440000",  # Technology events
+ *               "650e8400-e29b-41d4-a716-446655440001"   # Music events
+ *             ]
+ *             notification_radius: 10
+ *             email_notifications: true
  *     responses:
  *       200:
  *         description: Preferences updated successfully
+ *       400:
+ *         description: Invalid category IDs
  *       401:
  *         description: Unauthorized
+ *
+ *   get:
+ *     summary: Get user's preferences
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User preferences retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     preferences:
+ *                       $ref: '#/components/schemas/UserPreferences'
  */
 router.get('/preferences', userController.getPreferences);
 router.put('/preferences', preferencesValidation, validate, userController.updatePreferences);

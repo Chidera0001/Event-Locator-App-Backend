@@ -2,40 +2,53 @@ const eventService = require('../services/event.service');
 const NotificationService = require('../services/notification.service');
 const WebSocketServer = require('../websocket');
 const logger = require('../config/logger');
+const { isValidUUID } = require('../utils/validation');
 
 const EventController = {
   async createEvent(req, res, next) {
     try {
+      // Validate that required dates are present
+      if (!req.body.startDate) {
+        return res.status(400).json({
+          success: false,
+          message: 'Start date is required'
+        });
+      }
+
       const eventData = {
-        ...req.body,
-        creator_id: req.user.id,
-        location: {
-          type: 'Point',
-          coordinates: [
-            parseFloat(req.body.location.coordinates[0]),
-            parseFloat(req.body.location.coordinates[1])
-          ]
-        }
+        title: req.body.title,
+        description: req.body.description,
+        location: req.body.location,
+        address: req.body.address,
+        start_date: new Date(req.body.startDate).toISOString(), // Ensure proper date format
+        end_date: req.body.endDate ? new Date(req.body.endDate).toISOString() : null,
+        categories: req.body.categories
       };
+
+      logger.debug('Creating event with data:', eventData);
       
-      const event = await eventService.createEvent(eventData);
+      const event = await eventService.createEvent(eventData, req.user.id);
       
       // Schedule notifications
       await NotificationService.scheduleEventNotifications(event.id);
       
-      // Send real-time update
-      req.app.locals.wss.notifyEventUpdate(event.id, 'created', event);
+      // Send real-time update if WebSocket is available
+      if (req.app.locals.wss && typeof req.app.locals.wss.notifyEventUpdate === 'function') {
+        req.app.locals.wss.notifyEventUpdate(event.id, 'created', event);
+      }
       
       res.status(201).json({
         success: true,
-        message: req.t('eventCreated', { ns: 'event' }),
+        message: 'Event created successfully',
         data: { event }
       });
     } catch (error) {
+      logger.error('Error creating event:', error);
       if (error.message.includes('validation')) {
         return res.status(400).json({
           success: false,
-          error: error.message
+          message: 'Validation error',
+          errors: error.errors || [{ message: error.message }]
         });
       }
       next(error);
@@ -85,54 +98,53 @@ const EventController = {
   async updateEvent(req, res, next) {
     try {
       const { id } = req.params;
-      const {
-        title,
-        description,
-        latitude,
-        longitude,
-        address,
-        startTime,
-        endTime,
-        categories
-      } = req.body;
-      
       const userId = req.user.id;
+      const isAdmin = req.user.role === 'admin';
       
-      const event = await eventService.updateEvent(id, {
-        title,
-        description,
-        latitude,
-        longitude,
-        address,
-        startTime,
-        endTime,
-        categories
-      }, userId);
-      
-      // Send real-time update
-      req.app.locals.wss.notifyEventUpdate(id, 'updated', event);
+      logger.debug('Event update request:', {
+        eventId: id,
+        userId,
+        isAdmin,
+        updates: req.body
+      });
+
+      // Validate categories if provided
+      if (req.body.categories) {
+        const invalidUuids = req.body.categories.filter(categoryId => !isValidUUID(categoryId));
+        if (invalidUuids.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid category IDs provided',
+            invalidIds: invalidUuids
+          });
+        }
+      }
+
+      const event = await eventService.updateEvent(id, req.body, userId, isAdmin);
       
       res.status(200).json({
         success: true,
-        message: req.t('eventUpdated', { ns: 'event' }),
         data: { event }
       });
     } catch (error) {
       if (error.message === 'EVENT_NOT_FOUND') {
         return res.status(404).json({
           success: false,
-          message: req.t('eventNotFound', { ns: 'event' })
+          message: 'Event not found'
         });
       }
-      
       if (error.message === 'UNAUTHORIZED') {
         return res.status(403).json({
           success: false,
-          message: req.t('unauthorized', { ns: 'error' })
+          message: 'You are not authorized to update this event'
         });
       }
-      
-      next(error);
+      // Log the full error but send a cleaner message to the client
+      logger.error('Error updating event:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update event. Please verify all category IDs are valid.'
+      });
     }
   },
   
@@ -140,31 +152,33 @@ const EventController = {
     try {
       const { id } = req.params;
       const userId = req.user.id;
-      
-      await eventService.deleteEvent(id, userId);
-      
-      // Send real-time update
-      req.app.locals.wss.notifyEventUpdate(id, 'deleted', null);
+      const isAdmin = req.user.role === 'admin';
+
+      logger.debug('Event delete request:', {
+        eventId: id,
+        userId,
+        isAdmin
+      });
+
+      await eventService.deleteEvent(id, userId, isAdmin);
       
       res.status(200).json({
         success: true,
-        message: req.t('eventDeleted', { ns: 'event' })
+        message: 'Event deleted successfully'
       });
     } catch (error) {
       if (error.message === 'EVENT_NOT_FOUND') {
         return res.status(404).json({
           success: false,
-          message: req.t('eventNotFound', { ns: 'event' })
+          message: 'Event not found'
         });
       }
-      
       if (error.message === 'UNAUTHORIZED') {
         return res.status(403).json({
           success: false,
-          message: req.t('unauthorized', { ns: 'error' })
+          message: 'You are not authorized to delete this event'
         });
       }
-      
       next(error);
     }
   },
@@ -327,7 +341,68 @@ const EventController = {
     } catch (error) {
       next(error);
     }
+  },
+  
+  async getAllEvents(req, res, next) {
+    try {
+      const events = await eventService.getAllEvents();
+      res.status(200).json({
+        success: true,
+        data: { events }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  
+  async updateEventStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const event = await eventService.updateEventStatus(id, status);
+      
+      res.status(200).json({
+        success: true,
+        data: { event }
+      });
+    } catch (error) {
+      if (error.message === 'EVENT_NOT_FOUND') {
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+      next(error);
+    }
+  },
+  
+  async deleteEventAdmin(req, res, next) {
+    try {
+      const { id } = req.params;
+      await eventService.deleteEventAdmin(id);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Event deleted successfully'
+      });
+    } catch (error) {
+      if (error.message === 'EVENT_NOT_FOUND') {
+        return res.status(404).json({
+          success: false,
+          message: 'Event not found'
+        });
+      }
+      next(error);
+    }
   }
 };
+
+// Helper function to validate coordinates
+function isValidCoordinates(lat, lng) {
+  const validLat = !isNaN(lat) && lat >= -90 && lat <= 90;
+  const validLng = !isNaN(lng) && lng >= -180 && lng <= 180;
+  return validLat && validLng;
+}
 
 module.exports = EventController; 

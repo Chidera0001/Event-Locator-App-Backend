@@ -1,32 +1,53 @@
-const db = require('../config/database');
+const { Pool } = require('pg');
+const { pool } = require('../config/database');
+const { v4: uuidv4 } = require('uuid');
+const logger = require('../config/logger');
 
-const EventModel = (pool) => {
-  return {
-    async create(eventData) {
-      const query = `
-        INSERT INTO events (
-          title, description, location, address, 
-          start_date, end_date, category_id, creator_id
-        )
-        VALUES (
-          $1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, 
-          $6, $7, $8, $9
-        )
-        RETURNING *
-      `;
+// Create the event model instance directly instead of returning a factory function
+const eventModel = {
+  async createEvent(eventData) {
+    try {
+      logger.debug('Creating event with data:', eventData);
       
-      const result = await pool.query(query, [
+      const result = await pool.query(`
+        INSERT INTO events (
+          id, 
+          title, 
+          description, 
+          location, 
+          address, 
+          start_date, 
+          end_date, 
+          creator_id
+        ) VALUES (
+          $1, 
+          $2, 
+          $3, 
+          ST_SetSRID(ST_MakePoint($4, $5), 4326), 
+          $6, 
+          $7, 
+          $8, 
+          $9
+        ) RETURNING *`,
+        [
+          eventData.id,
         eventData.title,
         eventData.description,
-        eventData.location.coordinates[0],
-        eventData.location.coordinates[1],
+          eventData.location.coordinates[0], // longitude
+          eventData.location.coordinates[1], // latitude
         eventData.address,
-        eventData.startDate,
-        eventData.endDate,
-        eventData.categoryId,
-        eventData.creatorId
-      ]);
+          new Date(eventData.start_date), // Convert to Date object
+          eventData.end_date ? new Date(eventData.end_date) : null,
+          eventData.creator_id
+        ]
+      );
+
+      logger.debug('Event created successfully:', result.rows[0]);
       return result.rows[0];
+    } catch (error) {
+      logger.error('Error creating event:', error);
+      throw new Error(`Error creating event: ${error.message}`);
+    }
     },
 
     async findNearby(lat, lng, radius) {
@@ -53,167 +74,209 @@ const EventModel = (pool) => {
       return result.rows;
     },
 
-    async getEvents({ limit = 20, offset = 0 }) {
-      const query = `
-        SELECT e.id, e.title, e.description, 
-               ST_X(e.location::geometry) as longitude,
-               ST_Y(e.location::geometry) as latitude,
-               e.address, e.start_date, e.end_date, 
-               e.category_id, e.creator_id, e.created_at, e.updated_at,
-               u.username as creator_name
-        FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
-        ORDER BY e.start_date DESC
-        LIMIT $1 OFFSET $2
-      `;
+  async getEvents(options = {}) {
+    const { limit = 20, offset = 0 } = options;
+    
+    try {
+      const result = await pool.query(
+        `SELECT * FROM events
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
       
-      const result = await pool.query(query, [limit, offset]);
       return result.rows;
+    } catch (error) {
+      throw new Error(`Error getting events: ${error.message}`);
+    }
     },
     
     async getEventById(id) {
-      const query = `
-        SELECT e.id, e.title, e.description, 
-               ST_X(e.location::geometry) as longitude,
-               ST_Y(e.location::geometry) as latitude,
-               e.address, e.start_date, e.end_date, 
-               e.category_id, e.creator_id, e.created_at, e.updated_at,
-               u.username as creator_name
-        FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
-        WHERE e.id = $1
-      `;
-      
-      const result = await pool.query(query, [id]);
+    try {
+      const result = await pool.query(
+        'SELECT * FROM events WHERE id = $1',
+        [id]
+      );
       return result.rows[0] || null;
-    },
-    
-    async updateEvent(id, { title, description, latitude, longitude, address, startDate, endDate }) {
-      const updateFields = [];
-      const params = [id];
-      let paramIndex = 2;
-      
-      if (title !== undefined) {
-        updateFields.push(`title = $${paramIndex++}`);
-        params.push(title);
+    } catch (error) {
+      logger.error('Error getting event by ID:', error);
+      throw error;
+    }
+  },
+  
+  async updateEvent(id, eventData) {
+    try {
+      // Extract categories before updating event
+      const categories = eventData.categories;
+      delete eventData.categories; // Remove categories from eventData
+
+      // Map camelCase to snake_case
+      const fieldMappings = {
+        title: 'title',
+        description: 'description',
+        location: 'location',
+        address: 'address',
+        startDate: 'start_date',
+        endDate: 'end_date'
+      };
+
+      const updates = [];
+      const values = [];
+      let paramCount = 1;
+
+      // Build dynamic update query with proper field names
+      for (const [camelKey, value] of Object.entries(eventData)) {
+        const snakeKey = fieldMappings[camelKey];
+        if (value !== undefined && snakeKey && !['id', 'creator_id', 'created_at'].includes(snakeKey)) {
+          if (camelKey === 'location') {
+            // Handle location update separately
+            updates.push(`location = ST_SetSRID(ST_MakePoint($${paramCount}, $${paramCount + 1}), 4326)`);
+            values.push(value.coordinates[0], value.coordinates[1]); // longitude, latitude
+            paramCount += 2;
+          } else if (camelKey === 'startDate' || camelKey === 'endDate') {
+            // Handle date fields
+            updates.push(`${snakeKey} = $${paramCount}`);
+            values.push(new Date(value));
+            paramCount++;
+          } else {
+            updates.push(`${snakeKey} = $${paramCount}`);
+            values.push(value);
+            paramCount++;
+          }
+        }
       }
-      
-      if (description !== undefined) {
-        updateFields.push(`description = $${paramIndex++}`);
-        params.push(description);
+
+      if (updates.length === 0 && !categories) {
+        const event = await this.getEventById(id);
+        return event;
       }
-      
-      if (latitude !== undefined && longitude !== undefined) {
-        updateFields.push(`location = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography`);
-        params.push(longitude, latitude);
-        paramIndex += 2;
+
+      // Start transaction
+      await pool.query('BEGIN');
+
+      try {
+        // Update event details
+        values.push(id);
+        const eventQuery = `
+          UPDATE events 
+          SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP 
+          WHERE id = $${paramCount}
+          RETURNING *,
+            ST_X(location::geometry) as longitude,
+            ST_Y(location::geometry) as latitude
+        `;
+
+        logger.debug('Update event query:', { query: eventQuery, values });
+        const eventResult = await pool.query(eventQuery, values);
+        const updatedEvent = eventResult.rows[0];
+
+        // Update categories if provided
+        if (categories) {
+          await this.setEventCategories(id, categories);
+        }
+
+        await pool.query('COMMIT');
+
+        // Get updated event with categories
+        const finalEvent = await this.getEventById(id);
+        const eventCategories = await this.getEventCategories(id);
+        
+        return {
+          ...finalEvent,
+          categories: eventCategories
+        };
+
+      } catch (error) {
+        await pool.query('ROLLBACK');
+        throw error;
       }
-      
-      if (address !== undefined) {
-        updateFields.push(`address = $${paramIndex++}`);
-        params.push(address);
-      }
-      
-      if (startDate !== undefined) {
-        updateFields.push(`start_date = $${paramIndex++}`);
-        params.push(startDate);
-      }
-      
-      if (endDate !== undefined) {
-        updateFields.push(`end_date = $${paramIndex++}`);
-        params.push(endDate);
-      }
-      
-      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-      
-      const query = `
-        UPDATE events
-        SET ${updateFields.join(', ')}
-        WHERE id = $1
-        RETURNING id, title, description, 
-                  ST_X(location::geometry) as longitude,
-                  ST_Y(location::geometry) as latitude,
-                  address, start_date, end_date, 
-                  category_id, creator_id, updated_at
-      `;
-      
-      const result = await pool.query(query, params);
-      return result.rows[0];
+
+    } catch (error) {
+      logger.error('Error updating event:', error);
+      throw error;
+    }
     },
     
     async deleteEvent(id) {
-      const query = `
-        DELETE FROM events
-        WHERE id = $1
-        RETURNING id
-      `;
-      
-      const result = await pool.query(query, [id]);
-      return result.rows[0] || null;
-    },
+    try {
+      await pool.query('DELETE FROM events WHERE id = $1', [id]);
+    } catch (error) {
+      logger.error('Error deleting event:', error);
+      throw error;
+    }
+  },
+  
+  async findEventsByLocation(latitude, longitude, radius, options = {}) {
+    const { limit = 20, offset = 0 } = options;
     
-    async findEventsByLocation(latitude, longitude, radius, { limit = 20, offset = 0 }) {
-      const query = `
-        SELECT e.id, e.title, e.description, 
-               ST_X(e.location::geometry) as longitude,
-               ST_Y(e.location::geometry) as latitude,
-               e.address, e.start_date, e.end_date, 
-               e.category_id, e.creator_id, e.created_at, e.updated_at,
-               u.username as creator_name,
+    try {
+      const result = await pool.query(
+        `SELECT 
+          e.*,
                ST_Distance(
-                 e.location, 
+            location::geography,
                  ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-               ) / 1000 as distance_km
+          ) as distance
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
         WHERE ST_DWithin(
-          e.location,
+          location::geography,
           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
           $3 * 1000  -- Convert km to meters
         )
-        ORDER BY distance_km ASC, e.start_date ASC
-        LIMIT $4 OFFSET $5
-      `;
+        ORDER BY distance
+        LIMIT $4 OFFSET $5`,
+        [longitude, latitude, radius, limit, offset]
+      );
       
-      const params = [longitude, latitude, radius, limit, offset];
-      const result = await pool.query(query, params);
       return result.rows;
+    } catch (error) {
+      throw new Error(`Error finding events by location: ${error.message}`);
+    }
     },
     
     async setEventCategories(eventId, categoryIds) {
-      // Start a transaction
-      const client = await pool.getClient();
+    try {
+      await pool.query('BEGIN');
       
-      try {
-        await client.query('BEGIN');
-        
-        // Delete existing categories
-        const deleteQuery = `
-          DELETE FROM event_categories
-          WHERE event_id = $1
+      // Delete existing categories
+      await pool.query(
+        'DELETE FROM event_categories WHERE event_id = $1',
+        [eventId]
+      );
+      
+      // Insert new categories if any
+      if (categoryIds && categoryIds.length > 0) {
+        // First verify that all categories exist
+        const verifyQuery = `
+          SELECT id FROM categories 
+          WHERE id = ANY($1::uuid[])
         `;
-        await client.query(deleteQuery, [eventId]);
+        const verifyResult = await pool.query(verifyQuery, [categoryIds]);
         
-        // Insert new categories
-        if (categoryIds.length > 0) {
-          const insertValues = categoryIds.map((_, index) => `($1, $${index + 2})`).join(', ');
-          const insertQuery = `
+        // Get the valid category IDs that actually exist
+        const validCategoryIds = verifyResult.rows.map(row => row.id);
+        
+        if (validCategoryIds.length > 0) {
+          const values = validCategoryIds.map((_, index) => `($1, $${index + 2})`).join(', ');
+          const query = `
             INSERT INTO event_categories (event_id, category_id)
-            VALUES ${insertValues}
+            VALUES ${values}
           `;
           
-          const insertParams = [eventId, ...categoryIds];
-          await client.query(insertQuery, insertParams);
+          await pool.query(query, [eventId, ...validCategoryIds]);
+        } else {
+          logger.warn('No valid category IDs found among:', categoryIds);
         }
-        
-        await client.query('COMMIT');
+      }
+      
+      await pool.query('COMMIT');
         
         return this.getEventCategories(eventId);
       } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
+      await pool.query('ROLLBACK');
+      logger.error('Error setting event categories:', error);
+      // Instead of throwing, return empty array for categories
+      return [];
       }
     },
     
@@ -382,8 +445,32 @@ const EventModel = (pool) => {
         WHERE id = $1
       `;
       await pool.query(query, [id]);
-    }
-  };
+  },
+
+  async updateStatus(id, status) {
+    const result = await pool.query(
+      `UPDATE events 
+       SET status = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [status, id]
+    );
+    return result.rows[0];
+  },
+
+  async getAllEvents() {
+    const result = await pool.query(
+      `SELECT 
+        e.*,
+        u.username as creator_name,
+        ST_X(e.location::geometry) as longitude,
+        ST_Y(e.location::geometry) as latitude
+       FROM events e
+       JOIN users u ON e.creator_id = u.id
+       ORDER BY e.created_at DESC`
+    );
+    return result.rows;
+  }
 };
 
-module.exports = EventModel; 
+module.exports = eventModel; 

@@ -1,35 +1,39 @@
 const eventModel = require('../models/event.model');
 const notificationQueue = require('../queues/notification.queue');
+const NotificationService = require('./notification.service');
+const { v4: uuidv4 } = require('uuid');
+const logger = require('../config/logger');
 
 const EventService = {
   async createEvent(eventData, userId) {
-    // Create the event
-    const event = await eventModel.createEvent({
-      ...eventData,
-      createdBy: userId
-    });
-    
-    // Set event categories if provided
-    if (eventData.categories && eventData.categories.length > 0) {
-      await eventModel.setEventCategories(event.id, eventData.categories);
-    }
-    
-    // Add event to notification queue if it's in the future
-    const eventTime = new Date(event.start_time);
-    const now = new Date();
-    
-    if (eventTime > now) {
-      // Schedule notification 24 hours before the event
-      const notificationTime = new Date(eventTime);
-      notificationTime.setHours(notificationTime.getHours() - 24);
+    try {
+      // Create the event first
+      const event = await eventModel.createEvent({
+        ...eventData,
+        creator_id: userId,
+        id: uuidv4() // Generate a new UUID for the event
+      });
       
-      // If the notification time is still in the future, queue it
-      if (notificationTime > now) {
-        await notificationQueue.queueEventNotification(event.id, notificationTime);
+      // Set categories if provided
+      if (eventData.categories && eventData.categories.length > 0) {
+        try {
+          await eventModel.setEventCategories(event.id, eventData.categories);
+        } catch (error) {
+          logger.error('Error setting event categories:', error);
+          // Continue even if categories fail - we can update them later
+        }
       }
+      
+      // Schedule notifications if needed
+      if (event.start_date) {
+        await NotificationService.scheduleEventNotifications(event.id);
+      }
+      
+      return event;
+    } catch (error) {
+      logger.error('Error creating event:', error);
+      throw new Error(`Failed to create event: ${error.message}`);
     }
-    
-    return event;
   },
   
   async getEvents(options) {
@@ -40,42 +44,73 @@ const EventService = {
     return eventModel.getEventById(id);
   },
   
-  async updateEvent(id, eventData, userId) {
-    // Check if user is the creator of the event
-    const event = await eventModel.getEventById(id);
-    
-    if (!event) {
-      throw new Error('EVENT_NOT_FOUND');
+  async updateEvent(id, eventData, userId, isAdmin = false) {
+    try {
+      logger.debug('Updating event:', { id, userId, isAdmin, eventData });
+      
+      // Check if event exists
+      const event = await eventModel.getEventById(id);
+      
+      if (!event) {
+        logger.debug('Event not found:', id);
+        throw new Error('EVENT_NOT_FOUND');
+      }
+      
+      // Check authorization - allow if admin or creator
+      if (!isAdmin && event.creator_id !== userId) {
+        logger.debug('Unauthorized event update attempt:', {
+          eventId: id,
+          userId,
+          creatorId: event.creator_id
+        });
+        throw new Error('UNAUTHORIZED');
+      }
+
+      // Transform dates if present
+      const transformedData = {
+        ...eventData,
+        startDate: eventData.startDate ? new Date(eventData.startDate).toISOString() : undefined,
+        endDate: eventData.endDate ? new Date(eventData.endDate).toISOString() : undefined
+      };
+
+      // Update the event
+      const updatedEvent = await eventModel.updateEvent(id, transformedData);
+      
+      logger.debug('Event updated successfully:', id);
+      return updatedEvent;
+    } catch (error) {
+      logger.error('Error updating event:', error);
+      throw error;
     }
-    
-    if (event.created_by !== userId) {
-      throw new Error('UNAUTHORIZED');
-    }
-    
-    // Update the event
-    const updatedEvent = await eventModel.updateEvent(id, eventData);
-    
-    // Update event categories if provided
-    if (eventData.categories) {
-      await eventModel.setEventCategories(id, eventData.categories);
-    }
-    
-    return updatedEvent;
   },
   
-  async deleteEvent(id, userId) {
-    // Check if user is the creator of the event
-    const event = await eventModel.getEventById(id);
-    
-    if (!event) {
-      throw new Error('EVENT_NOT_FOUND');
+  async deleteEvent(id, userId, isAdmin = false) {
+    try {
+      logger.debug('Deleting event:', { id, userId, isAdmin });
+      
+      const event = await eventModel.getEventById(id);
+      
+      if (!event) {
+        logger.debug('Event not found:', id);
+        throw new Error('EVENT_NOT_FOUND');
+      }
+      
+      // Check authorization - allow if admin or creator
+      if (!isAdmin && event.creator_id !== userId) {
+        logger.debug('Unauthorized event deletion attempt:', {
+          eventId: id,
+          userId,
+          creatorId: event.creator_id
+        });
+        throw new Error('UNAUTHORIZED');
+      }
+
+      await eventModel.deleteEvent(id);
+      logger.debug('Event deleted successfully:', id);
+    } catch (error) {
+      logger.error('Error deleting event:', error);
+      throw error;
     }
-    
-    if (event.created_by !== userId) {
-      throw new Error('UNAUTHORIZED');
-    }
-    
-    return eventModel.deleteEvent(id);
   },
   
   async findEventsByLocation(latitude, longitude, radius, options) {
@@ -159,6 +194,27 @@ const EventService = {
       rating: ratings.average_rating,
       reviewCount: ratings.review_count
     };
+  },
+  
+  async deleteEventAdmin(id) {
+    // Admin can delete any event without creator check
+    const event = await eventModel.getEventById(id);
+    if (!event) {
+      throw new Error('EVENT_NOT_FOUND');
+    }
+    return eventModel.deleteEvent(id);
+  },
+  
+  async updateEventStatus(id, status) {
+    const event = await eventModel.getEventById(id);
+    if (!event) {
+      throw new Error('EVENT_NOT_FOUND');
+    }
+    return eventModel.updateStatus(id, status);
+  },
+  
+  async getAllEvents() {
+    return eventModel.getAllEvents();
   }
 };
 
