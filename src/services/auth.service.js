@@ -1,22 +1,22 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const userModel = require('../models/user.model');
+const User = require('../models/user.model');
 
 const AuthService = {
   async register({ username, email, password, language = 'en' }) {
     // Check if user already exists
-    const existingEmail = await userModel.findByEmail(email);
+    const existingEmail = await User.findByEmail(email);
     if (existingEmail) {
-      throw new Error('EMAIL_ALREADY_EXISTS');
+      throw new Error('Email already exists');
     }
     
-    const existingUsername = await userModel.findByUsername(username);
+    const existingUsername = await User.findByUsername(username);
     if (existingUsername) {
-      throw new Error('USERNAME_ALREADY_EXISTS');
+      throw new Error('Username already exists');
     }
     
     // Create new user
-    const user = await userModel.create({ username, email, password, language });
+    const user = await User.create({ username, email, password, language });
     
     // Generate token
     const token = this.generateToken(user);
@@ -26,15 +26,15 @@ const AuthService = {
   
   async login(email, password) {
     // Find user by email
-    const user = await userModel.findByEmail(email);
+    const user = await User.findByEmail(email);
     if (!user) {
-      throw new Error('INVALID_CREDENTIALS');
+      throw new Error('Invalid credentials');
     }
     
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-    if (!isPasswordValid) {
-      throw new Error('INVALID_CREDENTIALS');
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      throw new Error('Invalid credentials');
     }
     
     // Create a copy of user without the password hash

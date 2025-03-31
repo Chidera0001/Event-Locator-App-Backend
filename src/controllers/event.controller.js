@@ -1,40 +1,24 @@
 const eventService = require('../services/event.service');
 const NotificationService = require('../services/notification.service');
 const WebSocketServer = require('../websocket');
+const logger = require('../config/logger');
 
 const EventController = {
   async createEvent(req, res, next) {
     try {
-      const {
-        title,
-        description,
-        latitude,
-        longitude,
-        address,
-        startTime,
-        endTime,
-        categories
-      } = req.body;
+      const eventData = {
+        ...req.body,
+        creator_id: req.user.id,
+        location: {
+          type: 'Point',
+          coordinates: [
+            parseFloat(req.body.location.coordinates[0]),
+            parseFloat(req.body.location.coordinates[1])
+          ]
+        }
+      };
       
-      const userId = req.user.id;
-      
-      if (!title || !latitude || !longitude || !startTime) {
-        return res.status(400).json({
-          success: false,
-          message: req.t('missingFields', { ns: 'error' })
-        });
-      }
-      
-      const event = await eventService.createEvent({
-        title,
-        description,
-        latitude,
-        longitude,
-        address,
-        startTime,
-        endTime,
-        categories
-      }, userId);
+      const event = await eventService.createEvent(eventData);
       
       // Schedule notifications
       await NotificationService.scheduleEventNotifications(event.id);
@@ -48,6 +32,12 @@ const EventController = {
         data: { event }
       });
     } catch (error) {
+      if (error.message.includes('validation')) {
+        return res.status(400).json({
+          success: false,
+          error: error.message
+        });
+      }
       next(error);
     }
   },

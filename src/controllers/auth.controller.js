@@ -1,12 +1,13 @@
-const authService = require('../services/auth.service');
+const AuthService = require('../services/auth.service');
 const emailService = require('../services/email.service');
+const logger = require('../config/logger');
 
 const AuthController = {
   async register(req, res, next) {
     try {
       const { username, email, password, language } = req.body;
       
-      const { user, token } = await authService.register({
+      const { user, token } = await AuthService.register({
         username,
         email,
         password,
@@ -22,17 +23,10 @@ const AuthController = {
         data: { user, token }
       });
     } catch (error) {
-      if (error.message === 'EMAIL_ALREADY_EXISTS') {
+      if (error.message === 'Email already exists' || error.message === 'Username already exists') {
         return res.status(400).json({
           success: false,
-          message: req.t('emailTaken', { ns: 'error' })
-        });
-      }
-      
-      if (error.message === 'USERNAME_ALREADY_EXISTS') {
-        return res.status(400).json({
-          success: false,
-          message: req.t('usernameTaken', { ns: 'error' })
+          error: error.message
         });
       }
       
@@ -44,7 +38,7 @@ const AuthController = {
     try {
       const { email, password } = req.body;
       
-      const { user, token } = await authService.login(email, password);
+      const { user, token } = await AuthService.login(email, password);
       
       res.status(200).json({
         success: true,
@@ -52,10 +46,10 @@ const AuthController = {
         data: { user, token }
       });
     } catch (error) {
-      if (error.message === 'INVALID_CREDENTIALS') {
+      if (error.message === 'Invalid credentials') {
         return res.status(401).json({
           success: false,
-          message: req.t('invalidCredentials', { ns: 'error' })
+          error: 'Invalid email or password'
         });
       }
       

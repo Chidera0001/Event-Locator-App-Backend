@@ -6,8 +6,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest --coverage",
-    "migrate": "node src/db/migrations/run.js"
+    "test": "cross-env NODE_ENV=test jest --runInBand --detectOpenHandles --forceExit --config jest.config.js",
+    "test:watch": "cross-env NODE_ENV=test jest --watch --runInBand --config jest.config.js",
+    "test:coverage": "cross-env NODE_ENV=test jest --coverage --runInBand --forceExit --config jest.config.js",
+    "test:verbose": "cross-env NODE_ENV=test jest --verbose --config jest.config.js",
+    "lint": "eslint src/**/*.js",
+    "migrate": "node src/database/migrations/run-migrations.js",
+    "test:reset-db": "cross-env NODE_ENV=test node src/scripts/reset-test-db.js",
+    "pretest": "cross-env NODE_ENV=test node tests/db-setup.js"
   },
   "dependencies": {
     "axios": "^1.8.4",
@@ -20,6 +26,7 @@
     "i18next": "^22.4.15",
     "i18next-fs-backend": "^2.1.1",
     "i18next-http-middleware": "^3.3.0",
+    "ioredis": "^5.6.0",
     "jsonwebtoken": "^9.0.0",
     "morgan": "^1.10.0",
     "nodemailer": "^6.10.0",
@@ -34,14 +41,10 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
-    "jest": "^29.5.0",
+    "@types/jest": "^29.5.14",
+    "cross-env": "^7.0.3",
+    "jest": "^29.7.0",
     "nodemon": "^2.0.22",
-    "supertest": "^6.3.3"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "coveragePathIgnorePatterns": [
-      "/node_modules/"
-    ]
+    "supertest": "^6.3.4"
   }
 }
