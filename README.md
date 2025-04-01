@@ -29,7 +29,6 @@ A multi-user event locator application allowing users to discover events based o
   - Redis-based message queuing
   - WebSocket updates for event changes
 
-![Application Architecture](./docs/images/architecture.png)
 
 ## Technologies Used
 
@@ -122,7 +121,8 @@ A multi-user event locator application allowing users to discover events based o
    npm start      # Production mode
    ```
 
-![API Testing](./docs/images/api-testing.png)
+![Testing](./docs/images/Testing_01.png)
+![Testing2](./docs/images/Testing_02.png)
 
 ## API Documentation
 
