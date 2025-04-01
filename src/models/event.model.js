@@ -315,10 +315,10 @@ const eventModel = {
     
     async addFavorite(userId, eventId) {
       const query = `
-        INSERT INTO user_favorite_events (user_id, event_id)
+        INSERT INTO favorites (user_id, event_id)
         VALUES ($1, $2)
         ON CONFLICT (user_id, event_id) DO NOTHING
-        RETURNING id
+        RETURNING user_id, event_id, created_at
       `;
       
       const result = await pool.query(query, [userId, eventId]);
@@ -327,9 +327,9 @@ const eventModel = {
     
     async removeFavorite(userId, eventId) {
       const query = `
-        DELETE FROM user_favorite_events
+        DELETE FROM favorites
         WHERE user_id = $1 AND event_id = $2
-        RETURNING id
+        RETURNING user_id, event_id, created_at
       `;
       
       const result = await pool.query(query, [userId, eventId]);
@@ -344,12 +344,12 @@ const eventModel = {
                e.address, e.start_date, e.end_date, 
                e.category_id, e.creator_id, e.created_at, e.updated_at,
                u.username as creator_name,
-               ufe.created_at as favorited_at
+               f.created_at as favorited_at
         FROM events e
-        JOIN user_favorite_events ufe ON e.id = ufe.event_id
+        JOIN favorites f ON e.id = f.event_id
         LEFT JOIN users u ON e.creator_id = u.id
-        WHERE ufe.user_id = $1
-        ORDER BY ufe.created_at DESC
+        WHERE f.user_id = $1
+        ORDER BY f.created_at DESC
         LIMIT $2 OFFSET $3
       `;
       
@@ -358,22 +358,42 @@ const eventModel = {
     },
     
     async addReview(eventId, userId, { rating, review }) {
-      const query = `
-        INSERT INTO event_reviews (event_id, user_id, rating, review)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (event_id, user_id) 
-        DO UPDATE SET rating = $3, review = $4, updated_at = CURRENT_TIMESTAMP
-        RETURNING id, event_id, user_id, rating, review, created_at, updated_at
-      `;
+      // First check if user has already reviewed this event
+      const existingReview = await pool.query(
+        'SELECT id FROM event_reviews WHERE event_id = $1 AND user_id = $2',
+        [eventId, userId]
+      );
+
+      let query;
+      let values;
+
+      if (existingReview.rows.length > 0) {
+        // Update existing review
+        query = `
+          UPDATE event_reviews 
+          SET rating = $1, comment = $2
+          WHERE event_id = $3 AND user_id = $4
+          RETURNING id, event_id, user_id, rating, comment, created_at
+        `;
+        values = [rating, review, eventId, userId];
+      } else {
+        // Insert new review
+        query = `
+          INSERT INTO event_reviews (event_id, user_id, rating, comment)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id, event_id, user_id, rating, comment, created_at
+        `;
+        values = [eventId, userId, rating, review];
+      }
       
-      const result = await pool.query(query, [eventId, userId, rating, review]);
+      const result = await pool.query(query, values);
       return result.rows[0];
     },
     
     async getEventReviews(eventId, { limit = 20, offset = 0 }) {
       const query = `
-        SELECT er.id, er.event_id, er.user_id, er.rating, er.review, 
-               er.created_at, er.updated_at, u.username
+        SELECT er.id, er.event_id, er.user_id, er.rating, er.comment, 
+               er.created_at, u.username
         FROM event_reviews er
         JOIN users u ON er.user_id = u.id
         WHERE er.event_id = $1

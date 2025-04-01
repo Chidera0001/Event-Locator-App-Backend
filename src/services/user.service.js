@@ -1,23 +1,28 @@
-const userModel = require('../models/user.model');
+const User = require('../models/user.model');
 const locationModel = require('../models/location.model');
 const categoryModel = require('../models/category.model');
+const bcrypt = require('bcrypt');
 const logger = require('../config/logger');
 
 const UserService = {
   async getUserById(id) {
-    return userModel.findById(id);
+    return User.findById(id);
   },
   
   async getUserByEmail(email) {
-    return userModel.findByEmail(email);
+    return User.findByEmail(email);
   },
   
   async updateProfile(id, userData) {
-    return userModel.updateProfile(id, userData);
+    const user = await User.findById(id);
+    if (!user) {
+      throw new Error('USER_NOT_FOUND');
+    }
+    return user.updateProfile(userData);
   },
   
   async updatePassword(id, currentPassword, newPassword) {
-    const user = await userModel.findById(id);
+    const user = await User.findById(id);
     
     if (!user) {
       throw new Error('USER_NOT_FOUND');
@@ -29,13 +34,13 @@ const UserService = {
       throw new Error('INVALID_PASSWORD');
     }
     
-    return userModel.updatePassword(id, newPassword);
+    return user.updatePassword(newPassword);
   },
   
   async setUserLocation(userId, locationData) {
     try {
       // First verify user exists
-      const user = await userModel.findById(userId);
+      const user = await User.findById(userId);
       if (!user) {
         throw new Error('User not found');
       }
@@ -50,7 +55,7 @@ const UserService = {
   async getUserLocation(userId) {
     try {
       // First verify user exists
-      const user = await userModel.findById(userId);
+      const user = await User.findById(userId);
       if (!user) {
         throw new Error('User not found');
       }
